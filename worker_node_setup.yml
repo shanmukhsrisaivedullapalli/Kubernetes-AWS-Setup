@@ -1,0 +1,105 @@
+---
+- name: Set up Kubernetes Worker Node
+  hosts: all
+  become: true
+  vars:
+    k8s_version: "1.30"
+
+  tasks:
+    - name: Disable swap immediately
+      command: swapoff -a
+
+    - name: Ensure swap is removed from /etc/fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+.*)$'
+        replace: '# \1'
+
+    - name: Load required kernel modules
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Persist kernel modules across reboots
+      copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+
+    - name: Configure sysctl params for Kubernetes networking
+      copy:
+        dest: /etc/sysctl.d/k8s.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward                 = 1
+
+    - name: Apply sysctl parameters without reboot
+      command: sysctl --system
+
+    - name: Install containerd and dependencies
+      dnf:
+        name:
+          - containerd
+          - iptables
+        state: present
+
+    - name: Ensure containerd config directory exists
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+
+    - name: Generate default containerd configuration
+      shell: containerd config default > /etc/containerd/config.toml
+
+    - name: Set SystemdCgroup to true in containerd configuration
+      replace:
+        path: /etc/containerd/config.toml
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+
+    - name: Restart and enable containerd service
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: true
+
+    - name: Add official Kubernetes RPM repository
+      copy:
+        dest: /etc/yum.repos.d/kubernetes.repo
+        content: |
+          [kubernetes]
+          name=Kubernetes
+          baseurl=https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/rpm/
+          enabled=1
+          gpgcheck=1
+          gpgkey=https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/rpm/repodata/repomd.xml.key
+          exclude=kubelet kubeadm cri-tools ebtables
+
+    - name: Install kubelet and kubeadm
+      dnf:
+        name:
+          - kubelet
+          - kubeadm
+        state: present
+        disable_excludes: kubernetes
+
+    - name: Enable and start kubelet service
+      systemd:
+        name: kubelet
+        state: started
+        enabled: true
+
+    - name: Check if node is already joined to a cluster
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Execute kubeadm join command
+      command: "{{ k8s_join_command }}"
+      when: not kubelet_conf.stat.exists
