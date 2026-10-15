@@ -144,3 +144,9 @@
         owner: ec2-user
         group: ec2-user
         mode: '0755'
+    
+    - name: Fetch join command to GitHub Actions runner
+      fetch:
+        src: /home/ec2-user/join_command.sh
+        dest: /tmp/join_command.sh
+        flat: true
