@@ -8,6 +8,7 @@ terraform {
         dynamodb_table = "tf-state-lock"
         encrypt        = true
         skip_region_validation = true
+        skip_credentials_validation = true
     }
 
     required_providers {
