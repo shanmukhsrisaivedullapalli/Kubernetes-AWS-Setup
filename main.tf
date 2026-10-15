@@ -7,6 +7,7 @@ terraform {
         region         = "ap-south-2"
         dynamodb_table = "tf-state-lock"
         encrypt        = true
+        skip_region_validation = true
     }
 
     required_providers {
