@@ -45,7 +45,7 @@ jobs:
             - name: Worker Node IP
               id: worker-node-ip
               run: |
-                WORKER_NODE_IP=$(terraform output -json worker_public_ips)
+                WORKER_NODE_IP=$(terraform output -json worker_public_ip)
                 echo "Worker Node IP: $WORKER_NODE_IP"
                 echo "worker-node-ip=$WORKER_NODE_IP" >> $GITHUB_OUTPUT
     
